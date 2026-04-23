@@ -3,19 +3,68 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 use Illuminate\Support\Str;
 
 class Bb extends Model
 {
-    protected $fillable = ['title', 'content', 'price', 'image', 'user_id'];
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_APPROVED = 'approved';
+    public const STATUS_REJECTED = 'rejected';
+    protected $fillable = ['title', 'brand', 'content', 'price', 'image', 'user_id', 'category_id', 'status'];
     
     public function user() {
         return $this->belongsTo(User::class);
     }
 
+    public function category()
+    {
+        return $this->belongsTo(Category::class);
+    }
+
+    public function favoritedBy()
+    {
+        return $this->belongsToMany(User::class, 'favorites')->withTimestamps();
+    }
+
+    public function conversations()
+    {
+        return $this->hasMany(Conversation::class);
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('status', self::STATUS_APPROVED);
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return match ($this->status) {
+            self::STATUS_PENDING => 'На рассмотрении',
+            self::STATUS_REJECTED => 'Отклонено',
+            default => 'Одобрено',
+        };
+    }
+
     public function getImageUrlAttribute(): string
     {
+        if ($this->image) {
+            if (Str::startsWith($this->image, ['http://', 'https://'])) {
+                return $this->image;
+            }
+
+            $publicPath = public_path($this->image);
+            $storagePath = storage_path('app/public/cars/' . basename($this->image));
+            $legacyPublicPath = public_path('storage/cars/' . basename($this->image));
+
+            if (file_exists($publicPath) || file_exists($storagePath) || file_exists($legacyPublicPath)) {
+                if (file_exists($publicPath)) {
+                    return asset($this->image);
+                }
+
+                return asset('storage/cars/' . basename($this->image));
+            }
+        }
+
         $exactImage = $this->exactModelImageUrl();
         $matchedImage = $this->matchedImageUrl();
 
@@ -27,24 +76,15 @@ class Bb extends Model
             return $matchedImage;
         }
 
-        if ($this->image) {
-            if (Str::startsWith($this->image, ['http://', 'https://'])) {
-                return $this->image;
-            }
-
-            $storagePath = storage_path('app/public/cars/' . basename($this->image));
-            $publicPath = public_path($this->image);
-
-            if (file_exists($storagePath) || file_exists($publicPath)) {
-                return asset($this->image);
-            }
-        }
-
         return $this->fallbackImageUrl();
     }
 
     public function getBrandNameAttribute(): string
     {
+        if (!empty($this->brand)) {
+            return $this->brand;
+        }
+
         $title = Str::lower($this->title ?? '');
         $brands = [
             'mercedes-benz' => 'Mercedes-Benz',
@@ -250,6 +290,8 @@ class Bb extends Model
             'qx60' => $this->localCarImage('luxury-family-suv.png'),
             'cx-5' => $this->localCarImage('midsize-crossover.png'),
             'cx-9' => $this->localCarImage('luxury-family-suv.png'),
+            'skoda octavia' => $this->localCarImage('volkswagen-passat-2023.png'),
+            'skoda kodiaq' => $this->localCarImage('volkswagen-tiguan-2023.png'),
             'outback' => $this->localCarImage('offroad-suv.png'),
             'forester' => $this->localCarImage('midsize-crossover.png'),
             'xc60' => $this->localCarImage('luxury-family-suv.png'),
@@ -365,6 +407,8 @@ class Bb extends Model
             'infiniti qx60 2023' => 'infiniti-qx60-2023.png',
             'mazda cx-5 2023' => 'mazda-cx-5-2023.png',
             'mazda cx-9 2023' => 'mazda-cx-9-2023.png',
+            'skoda octavia 2024' => 'volkswagen-passat-2023.png',
+            'skoda kodiaq 2024' => 'volkswagen-tiguan-2023.png',
             'subaru outback 2023' => 'subaru-outback-2023.png',
             'subaru forester 2023' => 'subaru-forester-2023.png',
             'volvo xc60 2023' => 'volvo-xc60-2023.png',

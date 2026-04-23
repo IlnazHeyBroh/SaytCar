@@ -119,6 +119,20 @@
                     </div>
                     <div class="col-md-3">
                         <div class="custom-dropdown">
+                            <select name="category" id="category_filter">
+                                <option value="">Все категории</option>
+                                @foreach ($categories as $category)
+                                    <option value="{{ $category->slug }}" {{ request('category') === $category->slug ? 'selected' : '' }}>
+                                        {{ $category->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="custom-dropdown-select">{{ request('category') ? 'Категория выбрана' : 'Все категории' }}</div>
+                            <div class="custom-dropdown-menu"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="custom-dropdown">
                             <select name="price_filter" id="price_filter">
                                 <option value="">Все цены</option>
                                 <option value="0-500000" {{ request('price_filter') == '0-500000' ? 'selected' : '' }}>До 500 000 ₽</option>
@@ -168,7 +182,7 @@
                             </div>
                             <div class="p-4 d-flex flex-column h-100">
                                 <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                                    <span class="car-card-tag">{{ $bb->brand_name }}</span>
+                                    <span class="car-card-tag">{{ $bb->category?->name ?? $bb->brand_name }}</span>
                                     <span class="car-card-meta">#{{ $bb->id }}</span>
                                 </div>
                                 <h5>{{ $bb->title }}</h5>

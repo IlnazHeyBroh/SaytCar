@@ -13,6 +13,7 @@
         ['name' => 'Porsche', 'query' => 'porsche', 'logo' => 'porsche'],
         ['name' => 'Nissan', 'query' => 'nissan', 'logo' => 'nissan'],
         ['name' => 'Hyundai', 'query' => 'hyundai', 'logo' => 'hyundai'],
+        ['name' => 'Skoda', 'query' => 'skoda', 'logo' => 'skoda'],
         ['name' => 'Peugeot', 'query' => 'peugeot', 'logo' => 'peugeot'],
         ['name' => 'Bentley', 'query' => 'bentley', 'logo' => 'bentley'],
         ['name' => 'Jeep', 'query' => 'jeep', 'logo' => 'jeep'],

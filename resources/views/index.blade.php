@@ -179,7 +179,7 @@
                             <div class="p-3 p-md-4 flex-grow-1 d-flex flex-column">
                                 <div class="d-flex justify-content-between align-items-start mb-2 gap-3">
                                     <div>
-                                        <div class="car-card-tag mb-2">{{ $bb->brand_name }}</div>
+                                        <div class="car-card-tag mb-2">{{ $bb->category?->name ?? $bb->brand_name }}</div>
                                         <h5 class="mb-1">{{ $bb->title }}</h5>
                                         <div class="car-card-meta">Объявление #{{ $bb->id }}</div>
                                     </div>

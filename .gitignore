@@ -8,6 +8,9 @@
 .env
 .env.backup
 .env.production
+.beget-package/
+carhut-beget-package.zip
+public/uploads/
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml

@@ -4,6 +4,16 @@
 
 <section class="carhut-section py-5">
     <div class="container">
+        @if (session('success'))
+            <div class="alert alert-success dashboard-alert mb-4">{{ session('success') }}</div>
+        @endif
+
+        @if ($errors->any())
+            <div class="alert alert-danger mb-4">
+                {{ $errors->first() }}
+            </div>
+        @endif
+
         <div class="mb-4">
             <a href="{{ route('catalog') }}" class="btn btn-outline-light mb-3">
                 ← Назад к каталогу
@@ -24,6 +34,9 @@
                     <div class="car-detail-content">
                         <div class="d-flex flex-wrap gap-2 mb-3">
                             <span class="car-card-tag">{{ $bb->brand_name }}</span>
+                            @if ($bb->category)
+                                <span class="car-card-tag">{{ $bb->category->name }}</span>
+                            @endif
                             <span class="car-card-tag">Проверено CarHut</span>
                         </div>
                         <h1 class="car-detail-title">{{ $bb->title }}</h1>
@@ -60,6 +73,15 @@
                                     <div class="spec-value">{{ $bb->brand_name }}</div>
                                 </div>
                             </div>
+                            @if ($bb->category)
+                                <div class="spec-item">
+                                    <span class="spec-icon">📂</span>
+                                    <div>
+                                        <div class="spec-label">Категория</div>
+                                        <div class="spec-value">{{ $bb->category->name }}</div>
+                                    </div>
+                                </div>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -72,7 +94,7 @@
                             <h4 class="sidebar-title">Информация о продавце</h4>
                             <div class="seller-info">
                                 <div class="seller-avatar">
-                                    {{ substr($bb->user->name ?? 'U', 0, 1) }}
+                                    {{ mb_substr($bb->user->name ?? 'U', 0, 1) }}
                                 </div>
                                 <div class="seller-details">
                                     <div class="seller-name">{{ $bb->user->name ?? 'Не указано' }}</div>
@@ -83,12 +105,44 @@
                     @endif
 
                     <div class="sidebar-section">
-                        <button class="btn carhut-btn-primary w-100 mb-3">
-                            📞 Связаться с продавцом
-                        </button>
-                        <button class="btn btn-outline-light w-100">
-                            ⭐ Добавить в избранное
-                        </button>
+                        @auth
+                            @if (auth()->id() !== $bb->user_id)
+                                <form action="{{ route('messages.store', $bb) }}" method="POST" class="contact-seller-form">
+                                    @csrf
+                                    <h5 class="sidebar-subtitle">Связаться с продавцом</h5>
+                                    <textarea
+                                        name="body"
+                                        class="form-control contact-seller-textarea"
+                                        rows="4"
+                                        placeholder="Напишите продавцу: спросите про состояние, документы, пробег или договоритесь о просмотре."
+                                    >{{ old('body') }}</textarea>
+                                    <button type="submit" class="btn carhut-btn-primary w-100">
+                                        Отправить сообщение
+                                    </button>
+                                </form>
+                            @else
+                                <div class="contact-owner-note">
+                                    Это ваше объявление. Ответы покупателям будут приходить в раздел сообщений.
+                                </div>
+                            @endif
+
+                            <form action="{{ $isFavorite ? route('favorites.destroy', $bb) : route('favorites.store', $bb) }}" method="POST" class="mt-3">
+                                @csrf
+                                @if ($isFavorite)
+                                    @method('DELETE')
+                                @endif
+                                <button type="submit" class="btn favorite-action-btn w-100">
+                                    {{ $isFavorite ? 'Убрать из избранного' : 'Добавить в избранное' }}
+                                </button>
+                            </form>
+                        @else
+                            <a href="{{ route('login') }}" class="btn carhut-btn-primary w-100 mb-3">
+                                Войти, чтобы написать продавцу
+                            </a>
+                            <a href="{{ route('login') }}" class="btn favorite-action-btn w-100">
+                                Войти, чтобы добавить в избранное
+                            </a>
+                        @endauth
                     </div>
 
                     @auth

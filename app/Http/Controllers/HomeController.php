@@ -2,158 +2,165 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Http\Request;
 use App\Models\Bb;
+use App\Models\Brand;
+use App\Models\Category;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
+use Illuminate\Validation\Rule;
+
 class HomeController extends Controller
 {
-    
-    /**
-     * Create a new controller instance.
-     *
-     * @return void
-     */
     public function __construct()
     {
         $this->middleware('auth');
     }
 
-    
-    /**
-     * Show the application dashboard.
-     *
-     * @return \Illuminate\Contracts\Support\Renderable
-     */
     public function index()
     {
-        return view('home',['bbs' => Auth::user()->bbs()->latest()->get()]);
+        return view('home', [
+            'bbs' => Auth::user()->bbs()->with('category')->latest()->get(),
+        ]);
     }
 
-    public function create() {
-        return view('bb-create');
+    public function create()
+    {
+        return view('bb-create', [
+            'categories' => Category::listingTypes()->get(),
+            'brands' => Brand::names(),
+        ]);
     }
 
-    public function store(Request $request) {
+    public function store(Request $request)
+    {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
+            'brand' => ['required', Rule::exists('brands', 'name')],
             'content' => 'required|string',
             'price' => 'required|numeric|min:0',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            'category_id' => 'required|exists:categories,id',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
-        
-        $data = [
+
+        $bb = Auth::user()->bbs()->create([
             'title' => $validated['title'],
+            'brand' => $validated['brand'],
             'content' => $validated['content'],
-            'price' => $validated['price']
-        ];
-        
-        // Создаем объявление сначала, чтобы получить ID
-        $bb = Auth::user()->bbs()->create($data);
-        
+            'price' => $validated['price'],
+            'category_id' => $validated['category_id'],
+            'status' => Bb::STATUS_PENDING,
+        ]);
+
         if ($request->hasFile('image')) {
-            $image = $request->file('image');
-            // Получаем расширение файла
-            $extension = $image->getClientOriginalExtension();
-            // Создаем имя файла с ID объявления: car_{ID}.{расширение}
-            $imageName = 'car_' . $bb->id . '.' . $extension;
-            
-            // Сохраняем изображение с новым именем
-            $image->storeAs('public/cars', $imageName);
-            $data['image'] = 'storage/cars/' . $imageName;
-            
-            // Обновляем запись с путем к изображению
-            $bb->update(['image' => $data['image']]);
+            $bb->update([
+                'image' => $this->saveUploadedImage($request->file('image'), $bb->id),
+            ]);
         }
-        
-        return redirect()->route('home')->with('success', 'Объявление успешно добавлено!');
+
+        return redirect()->route('home')->with('success', 'Объявление отправлено на рассмотрение.');
     }
 
-    public function edit(Bb $bb) {
-        // Проверяем, что пользователь является владельцем объявления
+    public function edit(Bb $bb)
+    {
         if ($bb->user_id !== Auth::id()) {
             abort(403, 'У вас нет прав для редактирования этого объявления');
         }
-        return view('bb-edit', ['bb' => $bb]);
+
+        return view('bb-edit', [
+            'bb' => $bb,
+            'categories' => Category::listingTypes()->get(),
+            'brands' => Brand::names(),
+        ]);
     }
 
-    public function update(Request $request, Bb $bb) {
-        // Проверяем, что пользователь является владельцем объявления
+    public function update(Request $request, Bb $bb)
+    {
         if ($bb->user_id !== Auth::id()) {
             abort(403, 'У вас нет прав для редактирования этого объявления');
         }
-        
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
+            'brand' => ['required', Rule::exists('brands', 'name')],
             'content' => 'required|string',
             'price' => 'required|numeric|min:0',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            'category_id' => 'required|exists:categories,id',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
-        
+
         $data = [
             'title' => $validated['title'],
+            'brand' => $validated['brand'],
             'content' => $validated['content'],
-            'price' => $validated['price']
+            'price' => $validated['price'],
+            'category_id' => $validated['category_id'],
+            'status' => Bb::STATUS_PENDING,
         ];
-        
+
         if ($request->hasFile('image')) {
-            // Удаляем старое изображение если есть
-            if ($bb->image) {
-                $oldImagePath = storage_path('app/public/cars/' . basename($bb->image));
-                if (file_exists($oldImagePath)) {
-                    unlink($oldImagePath);
-                }
-                // Также проверяем путь через public
-                $oldPublicPath = public_path($bb->image);
-                if (file_exists($oldPublicPath)) {
-                    unlink($oldPublicPath);
-            }
-            }
-            
-            $image = $request->file('image');
-            // Получаем расширение файла
-            $extension = $image->getClientOriginalExtension();
-            // Создаем имя файла с ID объявления: car_{ID}.{расширение}
-            $imageName = 'car_' . $bb->id . '.' . $extension;
-            
-            // Сохраняем изображение с новым именем
-            $image->storeAs('public/cars', $imageName);
-            $data['image'] = 'storage/cars/' . $imageName;
+            $this->deleteImageFiles($bb->image);
+            $data['image'] = $this->saveUploadedImage($request->file('image'), $bb->id);
         }
-        
+
         $bb->fill($data);
         $bb->save();
-        return redirect()->route('home')->with('success', 'Объявление успешно обновлено!');
+
+        return redirect()->route('home')->with('success', 'Изменения сохранены и отправлены на повторное рассмотрение.');
     }
 
-    public function delete(Bb $bb) {
-        // Проверяем, что пользователь является владельцем объявления
+    public function delete(Bb $bb)
+    {
         if ($bb->user_id !== Auth::id()) {
             abort(403, 'У вас нет прав для удаления этого объявления');
         }
+
         return view('bb-delete', ['bb' => $bb]);
     }
 
-    public function destroy(Bb $bb) {
-        // Проверяем, что пользователь является владельцем объявления
+    public function destroy(Bb $bb)
+    {
         if ($bb->user_id !== Auth::id()) {
             abort(403, 'У вас нет прав для удаления этого объявления');
         }
-        
-        // Удаляем изображение если оно есть
-        if ($bb->image) {
-            $imagePath = storage_path('app/public/cars/' . basename($bb->image));
-            if (file_exists($imagePath)) {
-                unlink($imagePath);
-            }
-            // Также проверяем путь через public
-            $publicPath = public_path($bb->image);
-            if (file_exists($publicPath)) {
-                unlink($publicPath);
-            }
-        }
-        
+
+        $this->deleteImageFiles($bb->image);
         $bb->delete();
+
         return redirect()->route('home');
     }
-    
+
+    protected function saveUploadedImage($image, int $bbId): string
+    {
+        $extension = strtolower($image->getClientOriginalExtension());
+        $imageName = 'car_' . $bbId . '.' . $extension;
+        $directory = public_path('uploads/cars');
+
+        if (!File::exists($directory)) {
+            File::makeDirectory($directory, 0755, true);
+        }
+
+        $image->move($directory, $imageName);
+
+        return 'uploads/cars/' . $imageName;
+    }
+
+    protected function deleteImageFiles(?string $imagePath): void
+    {
+        if (!$imagePath) {
+            return;
+        }
+
+        $paths = [
+            public_path($imagePath),
+            public_path('storage/cars/' . basename($imagePath)),
+            storage_path('app/public/cars/' . basename($imagePath)),
+        ];
+
+        foreach ($paths as $path) {
+            if (File::exists($path)) {
+                File::delete($path);
+            }
+        }
+    }
 }

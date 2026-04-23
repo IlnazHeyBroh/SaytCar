@@ -3,23 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\Bb;
+use App\Models\Category;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class BbsController extends Controller
 {
-    public function index() { 
-        $query = Bb::query();
-        
-        // Поиск по названию
-        if (request()->has('search') && request('search')) {
+    public function index()
+    {
+        $query = Bb::with('category')->approved();
+
+        if (request()->filled('search')) {
             $query->where('title', 'like', '%' . request('search') . '%');
         }
-        
-        // Фильтр по цене
-        if (request()->has('price_max') && request('price_max')) {
+
+        if (request()->filled('price_max')) {
             $query->where('price', '<=', request('price_max'));
         }
-        
-        // Сортировка
+
         $sort = request('sort', 'latest');
         switch ($sort) {
             case 'price_asc':
@@ -33,41 +33,62 @@ class BbsController extends Controller
                 $query->latest();
                 break;
         }
-        
-        $bbs = $query->take(6)->get();
-        return view('index', ['bbs' => $bbs]);
+
+        return view('index', [
+            'bbs' => $query->take(6)->get(),
+        ]);
     }
 
-    public function detail($bb) {
-        // Пытаемся найти объявление по ID (bb уже проверен на числовое значение в маршруте)
-        $bbModel = Bb::find($bb);
+    public function detail($bb)
+    {
+        $bbModel = Bb::with('category', 'user')->find($bb);
         if (!$bbModel) {
             abort(404);
         }
-        
-        return view('detail', ['bb' => $bbModel]);
+
+        $user = request()->user();
+        $canViewUnapproved = $user && ($user->isAdmin() || $user->id === $bbModel->user_id);
+
+        if ($bbModel->status !== Bb::STATUS_APPROVED && !$canViewUnapproved) {
+            abort(404);
+        }
+
+        return view('detail', [
+            'bb' => $bbModel,
+            'isFavorite' => $user ? $user->hasFavorited($bbModel) : false,
+        ]);
     }
 
-    public function catalog() {
-        $query = Bb::query();
+    public function catalog()
+    {
+        $query = Bb::with('category')->approved();
+        $categories = Category::orderBy('name')->get();
 
-        // Фильтр по бренду (из страницы брендов)
         $brandFilter = trim((string) request('brand', ''));
         if ($brandFilter !== '') {
             $keywords = $this->brandKeywords($brandFilter);
             $query->where(function ($builder) use ($keywords) {
                 foreach ($keywords as $keyword) {
-                    $builder->orWhere('title', 'like', '%' . $keyword . '%');
+                    $builder->orWhere('title', 'like', '%' . $keyword . '%')
+                        ->orWhere('brand', 'like', '%' . $keyword . '%');
                 }
             });
         }
-        
-        // Поиск по названию
-        if (request()->has('search') && request('search')) {
-            $query->where('title', 'like', '%' . request('search') . '%');
+
+        if (request()->filled('search')) {
+            $query->where(function ($builder) {
+                $builder->where('title', 'like', '%' . request('search') . '%')
+                    ->orWhere('brand', 'like', '%' . request('search') . '%');
+            });
         }
-        
-        // Фильтр по цене
+
+        $categoryFilter = trim((string) request('category', ''));
+        if ($categoryFilter !== '') {
+            $query->whereHas('category', function ($builder) use ($categoryFilter) {
+                $builder->where('slug', $categoryFilter);
+            });
+        }
+
         if (request()->has('price_filter')) {
             $priceFilter = request('price_filter');
             switch ($priceFilter) {
@@ -85,8 +106,7 @@ class BbsController extends Controller
                     break;
             }
         }
-        
-        // Сортировка
+
         $sort = request('sort', 'latest');
         switch ($sort) {
             case 'price_asc':
@@ -100,9 +120,11 @@ class BbsController extends Controller
                 $query->latest();
                 break;
         }
-        
-        $bbs = $query->paginate(12)->withQueryString();
-        return view('catalog', ['bbs' => $bbs]);
+
+        return view('catalog', [
+            'bbs' => $query->paginate(12)->withQueryString(),
+            'categories' => $categories,
+        ]);
     }
 
     private function brandKeywords(string $brand): array
@@ -129,16 +151,18 @@ class BbsController extends Controller
         return $map[$normalized] ?? [$brand];
     }
 
-    public function about() {
+    public function about()
+    {
         return view('about');
     }
 
-    public function contact() {
+    public function contact()
+    {
         return view('contact');
     }
 
-    public function blog() {
-        // Создаем массив статей блога
+    public function blog()
+    {
         $blogPosts = [
             [
                 'id' => 1,
@@ -196,12 +220,11 @@ class BbsController extends Controller
             ],
         ];
 
-        // Используем LengthAwarePaginator для пагинации
         $currentPage = request()->get('page', 1);
-        $perPage = 6; // Показываем 6 статей на странице (1 featured + 5 в сетке)
+        $perPage = 6;
         $items = collect($blogPosts);
         $currentItems = $items->slice(($currentPage - 1) * $perPage, $perPage)->values();
-        $paginator = new \Illuminate\Pagination\LengthAwarePaginator(
+        $paginator = new LengthAwarePaginator(
             $currentItems,
             $items->count(),
             $perPage,
@@ -212,19 +235,23 @@ class BbsController extends Controller
         return view('blog', ['blogPosts' => $paginator]);
     }
 
-    public function sell() {
+    public function sell()
+    {
         return view('sell');
     }
 
-    public function calculator() {
+    public function calculator()
+    {
         return view('calculator');
     }
 
-    public function brands() {
+    public function brands()
+    {
         return view('brands');
     }
 
-    public function team() {
+    public function team()
+    {
         return view('team');
     }
 }
